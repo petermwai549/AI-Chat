@@ -296,8 +296,8 @@ export default function ChatPane({ chatId, onChatCreated }) {
                 onChange={(e) => setModel(e.target.value)}
                 className="text-xs text-gray-500 bg-gray-50/80 border border-gray-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-200 cursor-pointer hover:bg-gray-100 transition"
               >
-                <option value="gpt-oss:20b-cloud">🌐 GPT-OSS (Cloud)</option>
-                <option value="phi3.5:3.8b">💻 Phi3.5 (Local)</option>
+                <option value="gpt-oss:20b-cloud">GPT-OSS (Cloud)</option>
+                <option value="phi3.5:3.8b">Phi3.5 (Local)</option>
               </select>
 
               <button
@@ -316,7 +316,7 @@ export default function ChatPane({ chatId, onChatCreated }) {
 
           <div className="text-center mt-2 pointer-events-auto">
             <span className="text-[11px] text-gray-400 bg-white/60 backdrop-blur-sm px-3 py-1 rounded-full">
-              {model.includes('cloud') ? '🌐 Cloud model' : '💻 Local model'} ·
+              {model.includes('cloud') ? 'Cloud model' : 'Local model'} ·
               {state.streaming ? ' Generating...' : ' Press Enter to send'}
             </span>
           </div>
