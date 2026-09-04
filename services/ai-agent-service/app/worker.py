@@ -54,10 +54,10 @@ async def handle_message(message: aio_pika.IncomingMessage):
             )
             await db.commit()
 
-        print(f"✅ Title generated for chat {chat_id}: {title}")
+        print(f"Title generated for chat {chat_id}: {title}")
 
 async def main():
-    print("🚀 Starting chat-title-generation worker...")
+    print("Starting chat-title-generation worker...")
     connection = await aio_pika.connect_robust(amqp_url())
     channel = await connection.channel()
     await channel.set_qos(prefetch_count=5)
@@ -72,7 +72,7 @@ async def main():
         arguments={"x-dead-letter-exchange": DLX_EXCHANGE},
     )
 
-    print(f"👂 Listening on '{TITLE_QUEUE}'...")
+    print(f"Listening on '{TITLE_QUEUE}'...")
     await queue.consume(handle_message)
 
     try:

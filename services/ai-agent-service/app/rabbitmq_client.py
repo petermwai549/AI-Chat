@@ -41,7 +41,7 @@ async def publish_chat_title_job(chat_id: str, prompt: str):
     placeholder (truncated-prompt) title rather than blocking the response.
     """
     if _channel is None:
-        print("⚠️ RabbitMQ channel not initialized — skipping title generation job")
+        print("RabbitMQ channel not initialized — skipping title generation job")
         return
     try:
         payload = json.dumps({"chat_id": chat_id, "prompt": prompt}).encode()
@@ -53,4 +53,4 @@ async def publish_chat_title_job(chat_id: str, prompt: str):
             routing_key=TITLE_QUEUE,
         )
     except Exception as e:
-        print(f"⚠️ Failed to publish title generation job: {e}")
+        print(f"Failed to publish title generation job: {e}")

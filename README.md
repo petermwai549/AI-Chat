@@ -1,323 +1,273 @@
-# Microservices Ecosystem
+# AI Chat
 
-An AI chat application built as a Docker Compose microservices ecosystem. The
-React frontend communicates with a FastAPI service through Apache APISIX. The
-service stores users, chats, messages, and token usage in PostgreSQL, uses Redis
-for rate limits and token revocation, and sends background chat-title jobs to
-RabbitMQ. Model responses are provided by Ollama Cloud.
+Your own private ChatGPT-style AI assistant that you run on your own
+computer. Sign in with Google, chat with an AI model, and your
+conversations stay on your machine — not on someone else's server.
 
-## Full system architecture
+This project is free to use, fork, and modify. If you can install an app
+and copy-paste a few things into a text file, you can run this.
 
-The ecosystem is developed and operated as one Docker Compose stack. Source
-changes are mounted into the Vite frontend for hot reload, while the API and
-worker are built from the same FastAPI service image. At runtime, every client
-request enters through Apache APISIX, which provides the security and traffic
-control boundary before forwarding requests to the application service.
+---
 
-### From development to runtime
+## What it looks like
 
-```mermaid
-flowchart LR
-	subgraph Development[Development workflow]
-		Code["Frontend and service source"]
-		Compose["Docker Compose"]
-		Code --> Compose
-		Compose --> Vite["Vite dev server\nReact hot reload"]
-		Compose --> Images["FastAPI service image"]
-	end
+![Chat screen](screenshots/chat.png)
+![Login screen](screenshots/login.png)
 
-	subgraph Runtime[Application runtime]
-		Browser["User browser"]
-		Gateway["Apache APISIX\nAPI gateway"]
-		API["FastAPI AI agent\nREST + SSE"]
-		Worker["AI agent worker"]
-		Browser -->|HTTP / SSE| Gateway
-		Gateway -->|Authenticated API traffic| API
-		API -->|Background jobs| Worker
-	end
+---
 
-	Vite --> Browser
-	Images --> API
-	Images --> Worker
-```
+## What you'll need before starting
 
-### Runtime ecosystem
+- A computer running Windows, Mac, or Linux
+- About 20 minutes
+- A free Google account (for sign-in)
+- A free or paid [Ollama](https://ollama.com) account (this is what
+  actually powers the AI responses)
 
-```mermaid
-flowchart TB
-	Browser["Browser\nReact + Vite :5270"] --> Gateway["Apache APISIX :6080\nSecurity, routing, CORS, rate limits"]
-	Gateway --> API["FastAPI AI agent :8000\nAuth, chat API, SSE, metrics"]
+You don't need to know how to code. You will need to copy and paste a few
+commands into a program called a **terminal** (Mac/Linux) or **PowerShell**
+(Windows) — this is just a text-based window for typing commands, and
+every step below tells you exactly what to type.
 
-	subgraph Data["State and asynchronous processing"]
-		PostgreSQL[("PostgreSQL\nUsers, chats, messages, usage")]
-		Redis[("Redis\nCache, rate limits, token revocation")]
-		RabbitMQ[("RabbitMQ\nDurable background queue")]
-		Worker["AI agent worker\nTitle generation consumer"]
-	end
+---
 
-	API --> PostgreSQL
-	API --> Redis
-	API --> RabbitMQ
-	RabbitMQ --> Worker
-	Worker --> PostgreSQL
-	API --> Ollama["Ollama Cloud\nChat generation"]
-	Worker --> Ollama
+## Step 1 — Install Docker
 
-	subgraph Configuration["Gateway configuration"]
-		Etcd[("etcd\nAPISIX route/config store")]
-	end
-	Etcd --> Gateway
+This app runs inside something called **Docker** — think of it as a box
+that contains the whole app and everything it needs, so it runs the same
+way on any computer.
 
-	subgraph Monitoring["Monitoring and observability"]
-		Prometheus["Prometheus :6090\nScrape, alert, store metrics"]
-		Grafana["Grafana :6100\nDashboards and investigation"]
-		Exporters["Exporters\nPostgreSQL, Redis, RabbitMQ"]
-		Host["Node Exporter\nHost metrics"]
-		Containers["cAdvisor\nContainer metrics"]
-	end
+- **Windows or Mac**: download [Docker Desktop](https://www.docker.com/products/docker-desktop/), open the installer, click through it (like installing any other program), then restart your computer if it asks you to.
+- **Linux**: follow the [official install guide](https://docs.docker.com/engine/install/) for your distribution.
 
-	Gateway -. metrics .-> Prometheus
-	API -. "/metrics" .-> Prometheus
-	Exporters -.-> Prometheus
-	Host -.-> Prometheus
-	Containers -.-> Prometheus
-	Prometheus --> Grafana
-```
+Once installed, open Docker Desktop and leave it running in the
+background — it needs to be open for the app to work.
 
-APISIX is the public API boundary: it routes requests, applies CORS and rate
-limiting, exposes gateway metrics, and keeps its route configuration in etcd.
-The FastAPI service owns authentication and application behavior. PostgreSQL
-is the source of truth for durable data, Redis provides fast security and
-usage controls, and RabbitMQ keeps background title generation out of the
-interactive response path. Prometheus scrapes APISIX, FastAPI, exporters,
-the host, and containers; Grafana reads Prometheus to display the operational
-state of the whole ecosystem.
+---
 
-### Components
+## Step 2 — Download this project
 
-| Component | Responsibility | Local address |
-| --- | --- | --- |
-| Frontend | React chat UI, auth state, SSE rendering | http://localhost:5270 |
-| Apache APISIX | API routing, CORS, rate limiting, gateway metrics | http://localhost:6080 |
-| FastAPI service | Authentication, chat APIs, model streaming, metrics | http://localhost:8000 |
-| AI agent worker | Consumes title jobs without blocking chat responses | Internal only |
-| PostgreSQL | Durable application data | Internal only |
-| Redis | Rate limits, rolling token usage, revoked-token checks | Internal only |
-| RabbitMQ | Asynchronous chat-title events | http://localhost:15672 |
-| Prometheus | Metrics collection and alert evaluation | http://localhost:6090 |
-| Grafana | Dashboards backed by Prometheus | http://localhost:6100 |
-| Ollama Cloud | LLM response and title generation | Configured by `OLLAMA_HOST` |
+**Easiest way (no technical knowledge needed):**
+1. At the top of this page, click the green **Code** button, then **Download ZIP**.
+2. Find the downloaded ZIP file and extract/unzip it somewhere you'll remember, like your Desktop.
 
-etcd is the APISIX configuration store. cAdvisor and Node Exporter provide
-container and host metrics. The Ofelia container periodically prunes Docker
-images and build cache.
-
-## Request flows
-
-### Generate and save a chat response
-
-```mermaid
-sequenceDiagram
-		participant U as Browser
-		participant G as APISIX
-		participant A as FastAPI
-		participant R as Redis
-		participant P as PostgreSQL
-		participant O as Ollama
-		participant Q as RabbitMQ
-		participant W as Worker
-
-		U->>G: POST /api/v1/agent/generate
-		G->>A: Forward API key and JWT
-		A->>R: Check rate and token windows
-		A->>P: Create chat if needed
-		A->>P: Save user message
-		A-->>U: SSE chat_id and user_message_id
-		A->>O: POST /api/chat with conversation history
-		O-->>A: Stream model chunks
-		A-->>U: SSE chunk events
-		A->>P: Save assistant message and token usage
-		A->>R: Record rolling-window usage
-		A->>Q: Publish title job for a new chat
-		A-->>U: SSE assistant_message_id and [DONE]
-		Q-->>W: Consume title job
-		W->>O: Generate short title
-		W->>P: Update chat title
-```
-
-The frontend sends `apikey`, the current user ID, and a Bearer JWT. The API
-validates both the JWT and API key. Model output is sent as Server-Sent Events,
-so the UI can render the answer while it is generated.
-
-### Save an edited message
-
-```mermaid
-sequenceDiagram
-		participant U as Browser
-		participant G as APISIX
-		participant A as FastAPI
-		participant P as PostgreSQL
-
-		U->>G: PATCH /api/v1/chats/{chat_id}/messages/{message_id}
-		G->>A: Forward authenticated request
-		A->>P: Verify chat belongs to user
-		A->>P: Update content and edited_at
-		P-->>A: Commit transaction
-		A-->>U: Updated message JSON
-```
-
-### Regenerate a response
-
-Regeneration uses the same generation endpoint. The frontend submits a new
-prompt with the existing `chat_id`; the service verifies ownership, loads the
-stored conversation history, saves the new user message, streams a fresh Ollama
-response, and persists the new assistant message and usage record.
-
-## Prerequisites
-
-- Docker Engine and Docker Compose v2 (`docker compose`)
-- A browser
-- An Ollama Cloud API key and an available model, by default
-	`gpt-oss:20b`
-- Google OAuth credentials if Google sign-in is enabled
-- SMTP credentials if email verification is enabled
-
-## Configuration
-
-Create a root `.env` file. Do not commit it.
-
-```dotenv
-POSTGRES_USER=zeus
-POSTGRES_PASSWORD=replace-with-a-strong-password
-POSTGRES_DB=ai-agent
-RABBITMQ_USER=zeus
-RABBITMQ_PASSWORD=replace-with-a-strong-password
-REDIS_PASSWORD=replace-with-a-strong-password
-OLLAMA_HOST=https://ollama.com
-OLLAMA_API_KEY=replace-with-your-ollama-key
-JWT_SECRET=replace-with-a-long-random-secret
-API_KEY=replace-with-a-long-random-api-key
-GOOGLE_CLIENT_ID=optional-google-client-id
-GOOGLE_CLIENT_SECRET=optional-google-client-secret
-EMAIL_HOST=smtp.gmail.com
-EMAIL_PORT=587
-EMAIL_USER=optional-smtp-user
-EMAIL_PASSWORD=optional-smtp-password
-EMAIL_FROM=optional-sender
-GRAFANA_USER=admin
-GRAFANA_PASSWORD=replace-with-a-strong-password
-```
-
-The compose file has development fallbacks, but replacing them is strongly
-recommended. The frontend reads `VITE_API_ORIGIN`, `VITE_API_KEY`, and
-`VITE_GOOGLE_CLIENT_ID` at build/start time. When using the Docker frontend,
-the gateway origin defaults to `http://localhost:6080` and the frontend API
-key should match the backend `API_KEY`:
-
-```dotenv
-VITE_API_ORIGIN=http://localhost:6080
-VITE_API_KEY=replace-with-the-same-api-key
-VITE_GOOGLE_CLIENT_ID=optional-google-client-id
-```
-
-## Run locally
-
-From the repository root:
-
+**If you're comfortable with git instead:**
 ```bash
-docker compose up -d --build
-docker compose ps
+git clone https://github.com/petermwai549/AI-Chat.git
 ```
 
-Initialize the database once after PostgreSQL becomes healthy:
+---
 
+## Step 3 — Open a terminal in the project folder
+
+- **Windows**: open the extracted folder in File Explorer, hold `Shift` and right-click inside it, choose **"Open PowerShell window here"**.
+- **Mac**: open the extracted folder in Finder, right-click it, choose **Services → New Terminal at Folder** (if you don't see this option, open Terminal from Applications and type `cd ` followed by dragging the folder into the window, then press Enter).
+- **Linux**: right-click inside the folder in your file manager and look for **"Open Terminal Here"**.
+
+Keep this window open — you'll use it for the remaining steps.
+
+---
+
+## Step 4 — Set up your configuration file
+
+The app needs a few settings and passwords, kept in a file called `.env`.
+A template is provided — copy it and fill it in.
+
+In your terminal:
 ```bash
-docker exec -i postgres-db psql -U "${POSTGRES_USER:-zeus}" \
-	-d "${POSTGRES_DB:-ai-agent}" < schema.sql
+cp .env.example .env
+cp frontend/.env.example frontend/.env
 ```
 
-Register APISIX routes when the gateway has started:
+Now open the new `.env` file in any text editor (Notepad, TextEdit, or
+[VS Code](https://code.visualstudio.com/) all work fine) and fill in the
+blank values. The file has comments explaining each one — most can be left
+as-is, but a few need real values from the next two steps.
 
+---
+
+## Step 5 — Set up Google Sign-In
+
+This lets people log into the app with their Google account, the same way
+you'd sign into any other website "with Google" — no separate password to
+remember.
+
+1. Go to the [Google Cloud Console](https://console.cloud.google.com/) and sign in with any Google account.
+2. At the top, click the project dropdown → **New Project**. Give it any name (e.g. "My AI Chat") and click **Create**.
+3. Once created, make sure your new project is selected in that same dropdown.
+4. In the left sidebar, go to **APIs & Services → OAuth consent screen**. Choose **External**, click **Create**, and fill in the required fields (app name, your email) — you can leave most fields blank and click through to **Save and Continue** on each page.
+5. In the left sidebar, go to **APIs & Services → Credentials**.
+6. Click **+ Create Credentials → OAuth client ID**.
+7. For "Application type", choose **Web application**.
+8. Under **Authorized JavaScript origins**, add: `http://localhost:5270`
+9. Under **Authorized redirect URIs**, add: `http://localhost:5270/oauth/callback`
+10. Click **Create**. A box pops up showing your **Client ID** and **Client Secret** — copy both.
+
+Paste them into your `.env` file:
+```
+GOOGLE_CLIENT_ID=paste-your-client-id-here
+GOOGLE_CLIENT_SECRET=paste-your-client-secret-here
+```
+
+And also into `frontend/.env`:
+```
+VITE_GOOGLE_CLIENT_ID=paste-the-same-client-id-here
+```
+
+---
+
+## Step 6 — Set up Ollama (the AI itself)
+
+Ollama is the service that actually generates the AI's responses.
+
+1. Go to [ollama.com](https://ollama.com) and create a free account.
+2. Once signed in, look for **API Keys** in your account settings (usually under your profile menu).
+3. Click **Create API Key**, give it any name, and copy the key it shows you — you won't be able to see it again later.
+
+Paste it into your `.env` file:
+```
+OLLAMA_API_KEY=paste-your-ollama-key-here
+```
+
+> **Prefer not to use a paid cloud service?** Ollama can also run entirely
+> on your own computer for free (no API key needed), if it's powerful
+> enough to run AI models locally. That's a more advanced setup — see
+> [ollama.com/download](https://ollama.com/download) and change
+> `OLLAMA_HOST` in `.env` to point at your local Ollama instead of the
+> cloud one.
+
+---
+
+## Step 7 — Generate two security keys
+
+Your `.env` file also needs two random secret values, `JWT_SECRET` and
+`API_KEY`. These protect login sessions — never reuse example values from
+a tutorial, always generate your own.
+
+If you have a terminal open already, run this twice (once for each):
+```bash
+openssl rand -hex 32
+```
+Copy each result into the matching line in `.env`. No terminal comfort?
+Any long random mix of 32+ letters and numbers works — your password
+manager's "generate password" button is a fine substitute.
+
+Also copy your `API_KEY` value into `frontend/.env`'s `VITE_API_KEY`.
+
+---
+
+## Step 8 — Start the app
+
+Back in your terminal, in the project folder, run:
+```bash
+docker compose up -d
+```
+The first time you run this, it downloads everything it needs — this can
+take a few minutes depending on your internet connection. You'll see a lot
+of text scroll by; that's normal.
+
+Give it about a minute after it finishes to let everything fully start up
+before continuing to the next step.
+
+---
+
+## Step 9 — One-time setup (only needed the very first time)
+
+Two commands to run once, right after the app starts up for the first
+time ever. You won't need to repeat these on future startups.
+
+**Create the database tables:**
+```bash
+docker compose exec -T postgres psql -U aichat -d ai-agent < schema.sql
+```
+*(If you changed `POSTGRES_USER` or `POSTGRES_DB` in your `.env` file from
+their default values, use those instead of `aichat` and `ai-agent` above.)*
+
+**Set up the API routes:**
 ```bash
 ./migrate-routes.sh
 ```
 
-Open the application at http://localhost:5270. Useful service URLs are:
+If either command shows errors instead of finishing quietly, double-check
+`docker compose ps` shows everything as "Up" first — these two steps need
+the app's containers to already be running.
 
-- Health: http://localhost:6080/health
-- FastAPI docs: http://localhost:8000/docs
-- RabbitMQ management: http://localhost:15672
-- Prometheus: http://localhost:6090
-- Grafana: http://localhost:6100
+---
 
-The default Grafana login is the values of `GRAFANA_USER` and
-`GRAFANA_PASSWORD`.
+## Step 10 — Open the app
 
-View logs with:
-
-```bash
-docker compose logs -f ai-agent-service ai-agent-worker apisix frontend
+In your browser, go to:
+```
+http://localhost:5270
 ```
 
-Stop the stack while keeping data:
+You should see the sign-in screen. Click **Continue with Google** and
+you're in.
 
-```bash
-docker compose down
-```
+---
 
-## Reset all data
+## Using the app day to day
 
-This removes PostgreSQL, Redis, RabbitMQ, monitoring, and APISIX volumes. Use
-it only when a clean development environment is required:
+Once it's set up, you don't need to repeat all those steps again. Just:
 
-```bash
-docker compose down -v
-docker compose up -d --build
-docker exec -i postgres-db psql -U "${POSTGRES_USER:-zeus}" \
-	-d "${POSTGRES_DB:-ai-agent}" < schema.sql
-./migrate-routes.sh
-```
+- **To start it**: open a terminal in the project folder and run `docker compose up -d`
+- **To stop it**: run `docker compose down`
+- **To use it**: visit `http://localhost:5270` in your browser while it's running
 
-Do not use `docker system prune -af` as part of normal setup; it removes
-unrelated local Docker images and build cache.
+---
 
-## Development commands
+## Checking how your instance is doing (optional)
 
-The frontend runs in a bind-mounted Vite development container, so edits under
-`frontend/src` hot reload in the browser. To run frontend tooling locally:
+If you're running this for yourself or a small group, you probably don't
+need this — it's mainly useful if you want to keep an eye on things like
+how many people are chatting, how fast responses are, or whether anything
+is running low on resources.
 
-```bash
-cd frontend
-npm ci
-npm run lint
-npm run build
-```
+This comes built in — **you don't need to install or set up anything
+extra**. The dashboards and alerts are already included in this project
+and load automatically the moment you start the app.
 
-The FastAPI image installs dependencies from
-`services/ai-agent-service/requirements.txt`; the API and worker share the
-same image and source tree.
+To view them:
+1. Make sure the app is running (`docker compose up -d`)
+2. Open your browser to: `http://localhost:6100`
+3. Log in with the `GRAFANA_USER` and `GRAFANA_PASSWORD` you set in your `.env` file (defaults to username `admin` if you didn't change it)
+4. You'll land on a dashboard showing live stats about your AI Chat instance
 
-## Troubleshooting
+That's it — no configuration, no importing files, it's ready as soon as
+the app is.
 
-- Check readiness with `docker compose ps` and inspect failures using
-	`docker compose logs <service>`.
-- If the API returns `502`, wait for APISIX and the FastAPI container, then run
-	`./migrate-routes.sh` again.
-- If the browser reports a CORS error, confirm that the frontend origin is
-	allowed by the APISIX routes and that the frontend is using port `5270`.
-- If generation fails, verify `OLLAMA_HOST`, `OLLAMA_API_KEY`, and the model
-	name in `frontend/src/config.js`.
-- If authentication fails, ensure the frontend `VITE_API_KEY` equals the
-	backend `API_KEY`, and recreate the frontend container after changing it.
+---
 
-## Repository layout
+## Something not working?
 
-```text
-gateway/                  APISIX and etcd configuration
-frontend/                 React + Vite client
-services/ai-agent-service FastAPI API and RabbitMQ worker
-monitoring/               Prometheus configuration and Grafana dashboards
-schema.sql                PostgreSQL schema
-migrate-routes.sh         APISIX route registration helper
-docker-compose.yml        Complete local ecosystem
-```
+- **Nothing loads at `localhost:5270`** — check Docker Desktop is open and running, and give it another minute after `docker compose up -d` — some pieces take a moment to start.
+- **"Port already in use" error** — something else on your computer is already using that port. Close other apps that might use it, or ask for help changing the port in `docker-compose.yml`.
+- **Google sign-in gives an error** — double check the exact URLs in Step 5 match `http://localhost:5270` precisely (no trailing slash, `http` not `https`).
+- For anything deeper, see [docs/TROUBLESHOOTING.md](./docs/TROUBLESHOOTING.md).
+
+*Already run your own web server and want a nicer local address than a
+port number? See [docs/CUSTOM-DOMAIN.md](./docs/CUSTOM-DOMAIN.md) — this
+is entirely optional, the app works fine without it.*
+
+---
+
+## Want to know how it works under the hood?
+
+This app is built from several small services working together (a
+database, a message queue, an API gateway, and more) — see
+[docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) for the full technical
+breakdown, diagrams, and how a message flows through the system.
+
+---
+
+## Contributing
+
+Forks and pull requests are welcome. If you run into a bug or have an
+idea, open an issue — no need to be an expert, "this didn't work for me"
+is a perfectly good bug report.
+
+---
+
+## License
+
+*(Choose a license and add it here — [MIT](https://choosealicense.com/licenses/mit/) is a common, permissive choice for projects like this if you want others to freely use and build on it. Add a `LICENSE` file with your choice.)*

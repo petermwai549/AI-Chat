@@ -19,21 +19,21 @@ from app.metrics import (
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    print("🚀 Starting AI Agent Service with Prometheus metrics...")
-    print(f"📡 Environment: {settings.ENVIRONMENT}")
-    print(f"🔑 API Key configured: {'Yes' if settings.API_KEY else 'No'}")
+    print("Starting AI Agent Service with Prometheus metrics...")
+    print(f"Environment: {settings.ENVIRONMENT}")
+    print(f"API Key configured: {'Yes' if settings.API_KEY else 'No'}")
     
     await init_redis()
-    print("✅ Redis connected")
+    print("Redis connected")
     
     await init_rabbitmq()
-    print("✅ RabbitMQ connected")
+    print("RabbitMQ connected")
     
     yield
     
     await close_rabbitmq()
     await close_redis()
-    print("👋 Shutting down...")
+    print("Shutting down...")
 
 app = FastAPI(
     title="AI Agent Service",

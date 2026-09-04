@@ -60,7 +60,7 @@ def create_jwt(user_id: str, email: str, name: str = None) -> str:
 async def send_verification_email(email: str, code: str) -> bool:
     """Send verification code via email"""
     if not settings.EMAIL_USER or not settings.EMAIL_PASSWORD:
-        print(f"⚠️ Email not configured. Would send code {code} to {email}")
+        print(f"Email not configured. Would send code {code} to {email}")
         return True  # Return True for development
 
     subject = "Your verification code"
@@ -93,7 +93,7 @@ async def send_verification_email(email: str, code: str) -> bool:
             server.send_message(msg)
         return True
     except Exception as e:
-        print(f"❌ Email sending failed: {e}")
+        print(f"Email sending failed: {e}")
         return False
 
 # ============================================

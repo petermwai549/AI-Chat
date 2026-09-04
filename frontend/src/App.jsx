@@ -127,7 +127,7 @@ function AppContent() {
         const stored = sessionStorage.getItem('user_claims');
         if (stored) {
           const userData = JSON.parse(stored);
-          console.log('👤 Restored user session:', userData);
+          console.log('Restored user session:', userData);
           setUser(userData);
           // Fetch chats immediately after setting user
           fetchChats(userData);
@@ -182,7 +182,7 @@ function AppContent() {
   // Trigger chat fetch when user changes
   useEffect(() => {
     if (user && !chatFetchDone.current) {
-      console.log('👤 User changed, fetching chats...');
+      console.log('User changed, fetching chats...');
       fetchChats();
     }
   }, [user]);
