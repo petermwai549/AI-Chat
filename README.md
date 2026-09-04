@@ -262,12 +262,18 @@ breakdown, diagrams, and how a message flows through the system.
 
 ## Contributing
 
-Forks and pull requests are welcome. If you run into a bug or have an
-idea, open an issue — no need to be an expert, "this didn't work for me"
-is a perfectly good bug report.
+Contributions, issues, and feature requests are welcome! 
+
+- **Found a bug?** Open an issue describing what you did and what went wrong. You don't need technical jargon—"this didn't work for me" is a completely valid report.
+- **Have an idea?** Open an issue to discuss new features or improvements.
+- **Want to submit code?** Fork the repository, create a new branch for your changes, and open a pull request.
+
+Please make sure to test your changes locally before submitting a PR.
 
 ---
 
 ## License
 
-*(Choose a license and add it here — [MIT](https://choosealicense.com/licenses/mit/) is a common, permissive choice for projects like this if you want others to freely use and build on it. Add a `LICENSE` file with your choice.)*
+This project is licensed under the **MIT License** — see the [LICENSE](LICENSE) file for details. 
+
+You are free to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of this software.
