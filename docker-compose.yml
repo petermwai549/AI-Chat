@@ -1,0 +1,362 @@
+networks:
+  ecosystem_net:
+    driver: bridge
+
+volumes:
+  rabbitmq_data:
+  postgres_data:
+  redis_data:
+  prometheus_data:
+  grafana_data:
+  etcd_data:
+  cadvisor_data:
+
+services:
+  # -------------------------------------------------------------------
+  # 0. CONFIG STORE (etcd)
+  # -------------------------------------------------------------------
+  etcd:
+    image: gcr.io/etcd-development/etcd:v3.5.17
+    container_name: apisix-etcd
+    restart: always
+    environment:
+      ETCDCTL_API: "3"
+    command:
+      - /usr/local/bin/etcd
+      - --name=etcd0
+      - --data-dir=/etcd-data
+      - --listen-client-urls=http://0.0.0.0:2379
+      - --advertise-client-urls=http://etcd:2379
+      - --listen-peer-urls=http://0.0.0.0:2380
+      - --initial-advertise-peer-urls=http://etcd:2380
+      - --initial-cluster=etcd0=http://etcd:2380
+      - --initial-cluster-state=new
+      - --initial-cluster-token=apisix-etcd-token
+      - --log-level=info
+      - --logger=zap
+      - --log-outputs=stderr
+    volumes:
+      - etcd_data:/etcd-data
+    networks:
+      - ecosystem_net
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/etcdctl", "--endpoints=http://127.0.0.1:2379", "endpoint", "health"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # -------------------------------------------------------------------
+  # 1. API GATEWAY (Apache APISIX)
+  # -------------------------------------------------------------------
+  apisix:
+    image: apache/apisix:3.9.1-debian
+    container_name: apisix-gateway
+    restart: always
+    volumes:
+      - ./gateway/config.yaml:/usr/local/apisix/conf/config.yaml:ro
+      - ./gateway/apisix_config.yaml:/usr/local/apisix/conf/apisix.yaml:ro
+    ports:
+      - "6080:6080"
+      - "127.0.0.1:9180:9180"   # Admin API — localhost only, needed to fix routes stored in etcd
+    networks:
+      - ecosystem_net
+
+  # -------------------------------------------------------------------
+  # 2. SHARED EVENT BACKBONE (RabbitMQ)
+  # -------------------------------------------------------------------
+  rabbitmq:
+    image: rabbitmq:3.13-management
+    container_name: rabbitmq-backbone
+    restart: always
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-zeus}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-Root_121314_2020!!}
+    ports:
+      - "127.0.0.1:5672:5672"
+      - "127.0.0.1:15672:15672"
+      - "15692:15692"
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    networks:
+      - ecosystem_net
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "check_running"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # -------------------------------------------------------------------
+  # 3. RELATIONAL DATABASE (PostgreSQL)
+  # -------------------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    container_name: postgres-db
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-zeus}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-Root_121314_2020!!}
+      POSTGRES_DB: ${POSTGRES_DB:-ai-agent}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - ecosystem_net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-zeus} -d ${POSTGRES_DB:-ai-agent}"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:latest
+    container_name: postgres-exporter
+    restart: always
+    environment:
+      DATA_SOURCE_NAME: "postgresql://${POSTGRES_USER:-zeus}:${POSTGRES_PASSWORD:-Root_121314_2020!!}@postgres:5432/${POSTGRES_DB:-ai-agent}?sslmode=disable"
+    ports:
+      - "9187:9187"
+    depends_on:
+      - postgres
+    networks:
+      - ecosystem_net
+
+  # -------------------------------------------------------------------
+  # 4. IN-MEMORY CACHE (Redis)
+  # -------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: redis-cache
+    restart: always
+    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD:-Root_121314_2020!!}"]
+    volumes:
+      - redis_data:/data
+    networks:
+      - ecosystem_net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  redis-exporter:
+    image: oliver006/redis_exporter:latest
+    container_name: redis-exporter
+    restart: always
+    environment:
+      - REDIS_ADDR=redis://redis:6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-Root_121314_2020!!}
+    ports:
+      - "9121:9121"
+    depends_on:
+      - redis
+    networks:
+      - ecosystem_net
+
+  # -------------------------------------------------------------------
+  # 5. AI AGENT MICROSERVICE (FastAPI Service)
+  # -------------------------------------------------------------------
+  ai-agent-service:
+    build:
+      context: ./services/ai-agent-service
+      dockerfile: Dockerfile
+    container_name: ai-agent-service
+    restart: always
+    ports:
+      - "8000:8000"
+    environment:
+      # Database - Using credentials from .env
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-zeus}:${POSTGRES_PASSWORD:-Root_121314_2020!!}@postgres:5432/${POSTGRES_DB:-ai-agent}
+
+      # RabbitMQ
+      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_USER=${RABBITMQ_USER:-zeus}
+      - RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD:-Root_121314_2020!!}
+
+      # Redis
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-Root_121314_2020!!}
+
+      # Ollama
+      - OLLAMA_HOST=https://ollama.com
+      - OLLAMA_API_KEY=${OLLAMA_API_KEY:-ce4ad9a6262a4c12a8f581eed4fa4a97.dd_l4mNwnJGOpB99-od3QHar}
+
+      # Google OAuth
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-837704981081-hpdhhlkbu1vfi1avc83bhs4q7dsh78gp.apps.googleusercontent.com}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-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}
+
+      # Email
+      - EMAIL_HOST=${EMAIL_HOST:-smtp.gmail.com}
+      - EMAIL_PORT=${EMAIL_PORT:-587}
+      - EMAIL_USER=${EMAIL_USER:-petermwai5499@gmail.com}
+      - EMAIL_PASSWORD=${EMAIL_PASSWORD:-qmkmupqpzohtskvd}
+      - EMAIL_FROM=${EMAIL_FROM:-petermwai5499@gmail.com}
+
+      # JWT & API Keys
+      - JWT_SECRET=${JWT_SECRET:-fa2f8f80a08b5ec0406c57b621b8336d}
+      - API_KEY=${API_KEY:-423a13555db9feadcceb78a8993a7354e1536edb}
+
+      # Token limits
+      - TOKEN_LIMIT_5H=${TOKEN_LIMIT_5H:-50000}
+      - TOKEN_LIMIT_DAILY=${TOKEN_LIMIT_DAILY:-200000}
+      - TOKEN_LIMIT_WEEKLY=${TOKEN_LIMIT_WEEKLY:-1000000}
+
+      # Environment
+      - ENVIRONMENT=${ENVIRONMENT:-development}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - ecosystem_net
+
+  # -------------------------------------------------------------------
+  # 5b. AI AGENT WORKER (RabbitMQ consumer)
+  # -------------------------------------------------------------------
+  ai-agent-worker:
+    build:
+      context: ./services/ai-agent-service
+      dockerfile: Dockerfile
+    container_name: ai-agent-worker
+    restart: always
+    command: ["python", "-m", "app.worker"]
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-zeus}:${POSTGRES_PASSWORD:-Root_121314_2020!!}@postgres:5432/${POSTGRES_DB:-ai-agent}
+      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_USER=${RABBITMQ_USER:-zeus}
+      - RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD:-Root_121314_2020!!}
+      - OLLAMA_HOST=https://ollama.com
+      - OLLAMA_API_KEY=${OLLAMA_API_KEY:-ce4ad9a6262a4c12a8f581eed4fa4a97.dd_l4mNwnJGOpB99-od3QHar}
+      - API_KEY=${API_KEY:-423a13555db9feadcceb78a8993a7354e1536edb}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      rabbitmq:
+        condition: service_started
+      postgres:
+        condition: service_healthy
+    networks:
+      - ecosystem_net
+
+  # -------------------------------------------------------------------
+  # 6. CONTAINER MONITORING (cAdvisor)
+  # -------------------------------------------------------------------
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:latest
+    container_name: cadvisor
+    restart: always
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    ports:
+      - "8090:8080"
+    privileged: true
+    devices:
+      - /dev/kmsg
+    networks:
+      - ecosystem_net
+
+  # -------------------------------------------------------------------
+  # 7. SYSTEM MONITORING (Node Exporter)
+  # -------------------------------------------------------------------
+  node-exporter:
+    image: prom/node-exporter:latest
+    container_name: node-exporter
+    restart: always
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.sysfs=/host/sys'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc|rootfs/var/lib/docker/overlay2|rootfs/run/docker/netns|rootfs/var/lib/docker/containers)($$|/)'
+    ports:
+      - "9100:9100"
+    networks:
+      - ecosystem_net
+
+  # -------------------------------------------------------------------
+  # 8. OBSERVABILITY STACK (Prometheus & Grafana)
+  # -------------------------------------------------------------------
+  prometheus:
+    image: prom/prometheus:v2.52.0
+    container_name: prometheus
+    restart: always
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/alert.rules.yml:/etc/prometheus/alert.rules.yml:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "127.0.0.1:6090:9090"
+    networks:
+      - ecosystem_net
+
+  grafana:
+    image: grafana/grafana:11.0.0
+    container_name: grafana
+    restart: always
+    environment:
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-Root_121314_2020!!}
+      - GF_SERVER_HTTP_PORT=3000
+      - GF_SERVER_ROOT_URL=http://localhost:6100
+      - GF_INSTALL_PLUGINS=grafana-piechart-panel,grafana-clock-panel,grafana-simple-json-datasource
+    volumes:
+      - ./monitoring/grafana-datasources.yml:/etc/grafana/provisioning/datasources/datasources.yml:ro
+      - ./monitoring/grafana-dashboards.yml:/etc/grafana/provisioning/dashboards/dashboards.yml:ro
+      - ./monitoring/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    ports:
+      - "127.0.0.1:6100:3000"
+    depends_on:
+      - prometheus
+    networks:
+      - ecosystem_net
+
+  # -------------------------------------------------------------------
+  # 9. FRONTEND (React + Vite, dev-mode with hot reload)
+  # -------------------------------------------------------------------
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    container_name: frontend
+    restart: unless-stopped
+    mem_limit: 300m
+    cpus: 1.0
+    ports:
+      - "127.0.0.1:5270:5270"
+      - "[::1]:5270:5270"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    depends_on:
+      - ai-agent-service
+    networks:
+      - ecosystem_net
+
+  # -------------------------------------------------------------------
+  # 10. DOCKER MAINTENANCE (weekly image/build-cache pruning)
+  # -------------------------------------------------------------------
+  pruner:
+    image: mcuadros/ofelia:latest
+    container_name: docker_pruner
+    restart: always
+    command: daemon --docker -f label=ofelia.enabled=true
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    labels:
+      ofelia.enabled: "true"
+      ofelia.job-run.weekly-prune.schedule: "@weekly"
+      ofelia.job-run.weekly-prune.image: "docker:27-cli"
+      ofelia.job-run.weekly-prune.volume: "/var/run/docker.sock:/var/run/docker.sock"
+      ofelia.job-run.weekly-prune.command: >-
+        sh -c "docker image prune -af && docker builder prune -af"

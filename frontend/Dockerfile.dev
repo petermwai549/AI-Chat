@@ -1,0 +1,19 @@
+# frontend/Dockerfile.dev
+#
+# Dev-mode image: runs the Vite dev server with hot reload, source bind-mounted
+# from the host so edits show up instantly — no rebuild needed. This is the
+# image used for the always-running local dev service. It is NOT what you'd
+# deploy; keep the existing `Dockerfile` (nginx + production build) for that,
+# built manually/occasionally as a pre-deploy sanity check.
+
+FROM node:20-alpine
+WORKDIR /app
+
+COPY package*.json ./
+RUN npm ci
+
+COPY . .
+
+EXPOSE 5270
+
+CMD ["npm", "run", "dev", "--", "--host", "--port", "5270"]

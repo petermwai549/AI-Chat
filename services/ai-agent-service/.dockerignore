@@ -1,0 +1,83 @@
+# .dockerignore
+# Keeps the build context small and stops caches/secrets from ever landing
+# in an image layer. Applies to whichever directory the Dockerfile lives in
+# (repo root for a single build context, or per-service if you build the
+# frontend and backend separately — copy this file into each context dir).
+
+# --- Version control ---
+.git
+.gitignore
+.gitattributes
+
+# --- Python / FastAPI backend ---
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+.Python
+*.egg-info/
+.eggs/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+alembic.ini.bak
+
+# --- Node / React frontend ---
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.npm/
+.yarn/
+dist/
+build/
+.next/
+.vite/
+.turbo/
+coverage/
+
+# --- Env / secrets (never bake these into an image) ---
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# --- Local infra / data ---
+docker-compose*.yml
+Dockerfile*
+.dockerignore
+postgres-data/
+redis-data/
+*.sqlite3
+*.db
+
+# --- Logs ---
+*.log
+logs/
+
+# --- Editor / OS cruft ---
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+
+# --- Docs / misc (rarely needed at runtime) ---
+README.md
+CHANGELOG.md
+docs/
+*.md
+!requirements.md
+
+# --- Tests (skip if your image needs to run them, e.g. in CI) ---
+tests/
+**/__tests__/
+**/*.test.js
+**/*.test.jsx
+**/*.spec.py

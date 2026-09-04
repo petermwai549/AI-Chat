@@ -1,0 +1,115 @@
+{
+  "title": "Redis",
+  "uid": "redis",
+  "schemaVersion": 16,
+  "version": 1,
+  "refresh": "10s",
+  "time": { "from": "now-6h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Redis Status",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 4, "x": 0, "y": 0 },
+      "targets": [{ "expr": "redis_up", "legendFormat": "up" }],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "type": "value", "value": "1", "text": "✅ UP", "color": "green" },
+            { "type": "value", "value": "0", "text": "❌ DOWN", "color": "red" }
+          ]
+        }
+      }
+    },
+    {
+      "id": 2,
+      "title": "Connected Clients",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 4, "x": 4, "y": 0 },
+      "targets": [{ "expr": "redis_connected_clients", "legendFormat": "clients" }]
+    },
+    {
+      "id": 3,
+      "title": "Cache Hit Ratio",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 4, "x": 8, "y": 0 },
+      "targets": [
+        {
+          "expr": "sum(rate(redis_keyspace_hits_total[5m])) / (sum(rate(redis_keyspace_hits_total[5m])) + sum(rate(redis_keyspace_misses_total[5m]))) * 100",
+          "legendFormat": "Hit Ratio"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": 0 },
+              { "color": "yellow", "value": 70 },
+              { "color": "green", "value": 90 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 4,
+      "title": "Uptime",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 4, "x": 12, "y": 0 },
+      "targets": [{ "expr": "redis_uptime_in_seconds", "legendFormat": "uptime" }],
+      "fieldConfig": { "defaults": { "unit": "s" } }
+    },
+    {
+      "id": 5,
+      "title": "Memory Usage",
+      "type": "graph",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
+      "targets": [
+        { "expr": "redis_memory_used_bytes / 1024 / 1024", "legendFormat": "Used (MiB)" },
+        { "expr": "redis_memory_max_bytes / 1024 / 1024", "legendFormat": "Max (MiB)" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "MiB" } }
+    },
+    {
+      "id": 6,
+      "title": "Commands Processed / sec",
+      "type": "graph",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
+      "targets": [
+        { "expr": "rate(redis_commands_processed_total[5m])", "legendFormat": "commands/sec" }
+      ]
+    },
+    {
+      "id": 7,
+      "title": "Keys by Database",
+      "type": "graph",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 12 },
+      "targets": [
+        { "expr": "redis_db_keys", "legendFormat": "{{db}}" }
+      ]
+    },
+    {
+      "id": 8,
+      "title": "Evicted vs Expired Keys / sec",
+      "type": "graph",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 12 },
+      "targets": [
+        { "expr": "rate(redis_evicted_keys_total[5m])", "legendFormat": "evicted/sec" },
+        { "expr": "rate(redis_expired_keys_total[5m])", "legendFormat": "expired/sec" }
+      ]
+    },
+    {
+      "id": 9,
+      "title": "Network I/O",
+      "type": "graph",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 20 },
+      "targets": [
+        { "expr": "rate(redis_net_input_bytes_total[5m])", "legendFormat": "in bytes/sec" },
+        { "expr": "rate(redis_net_output_bytes_total[5m])", "legendFormat": "out bytes/sec" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "Bps" } }
+    }
+  ]
+}

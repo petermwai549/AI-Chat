@@ -1,0 +1,77 @@
+{
+  "title": "APISIX Gateway",
+  "uid": "apisix",
+  "schemaVersion": 16,
+  "version": 2,
+  "refresh": "10s",
+  "time": { "from": "now-6h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "title": "etcd Reachable",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+      "targets": [{ "expr": "apisix_etcd_reachable", "legendFormat": "reachable" }],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "type": "value", "value": "1", "text": "✅ OK", "color": "green" },
+            { "type": "value", "value": "0", "text": "❌ UNREACHABLE", "color": "red" }
+          ]
+        }
+      }
+    },
+    {
+      "id": 2,
+      "title": "Active Connections",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
+      "targets": [
+        { "expr": "apisix_nginx_http_current_connections{state=\"active\"}", "legendFormat": "active" }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Request Rate by Route",
+      "type": "graph",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
+      "targets": [
+        { "expr": "sum(rate(apisix_http_status[5m])) by (route)", "legendFormat": "{{route}}" }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Response Status Codes",
+      "type": "graph",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
+      "targets": [
+        { "expr": "sum(rate(apisix_http_status[5m])) by (code)", "legendFormat": "{{code}}" }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Request Latency (P95) by Route",
+      "type": "graph",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 12 },
+      "description": "type=\"request\" is client-facing latency (gateway + upstream); type=\"apisix\" is gateway-only overhead.",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(apisix_http_latency_bucket{type=\"request\"}[5m])) by (le, route))",
+          "legendFormat": "{{route}}"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "ms" } }
+    },
+    {
+      "id": 6,
+      "title": "Bandwidth by Route",
+      "type": "graph",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 20 },
+      "targets": [
+        { "expr": "sum(rate(apisix_bandwidth{type=\"ingress\"}[5m])) by (route)", "legendFormat": "{{route}} in" },
+        { "expr": "sum(rate(apisix_bandwidth{type=\"egress\"}[5m])) by (route)", "legendFormat": "{{route}} out" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "Bps" } }
+    }
+  ]
+}

@@ -1,0 +1,128 @@
+{
+  "title": "PostgreSQL",
+  "uid": "postgres",
+  "schemaVersion": 16,
+  "version": 2,
+  "refresh": "10s",
+  "time": { "from": "now-6h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Active Connections",
+      "type": "graph",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "expr": "pg_stat_database_numbackends{datname!~\"template.*\"}",
+          "legendFormat": "{{datname}}"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Transaction Rate",
+      "type": "graph",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "targets": [
+        {
+          "expr": "rate(pg_stat_database_xact_commit{datname!~\"template.*\"}[5m])",
+          "legendFormat": "Commits"
+        },
+        {
+          "expr": "rate(pg_stat_database_xact_rollback{datname!~\"template.*\"}[5m])",
+          "legendFormat": "Rollbacks"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Cache Hit Ratio",
+      "type": "stat",
+      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 8 },
+      "targets": [
+        {
+          "expr": "sum(pg_stat_database_blks_hit{datname!~\"template.*\"}) / sum(pg_stat_database_blks_hit{datname!~\"template.*\"} + pg_stat_database_blks_read{datname!~\"template.*\"}) * 100",
+          "legendFormat": "Cache Hit Ratio"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": 0 },
+              { "color": "yellow", "value": 90 },
+              { "color": "green", "value": 95 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 4,
+      "title": "Disk Block Reads / sec (actual physical I/O, not cache)",
+      "type": "graph",
+      "gridPos": { "h": 6, "w": 18, "x": 6, "y": 8 },
+      "targets": [
+        {
+          "expr": "rate(pg_stat_database_blks_read{datname!~\"template.*\"}[5m])",
+          "legendFormat": "{{datname}}"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Row-Level Throughput",
+      "type": "graph",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 14 },
+      "targets": [
+        {
+          "expr": "rate(pg_stat_database_tup_returned{datname!~\"template.*\"}[5m])",
+          "legendFormat": "{{datname}} returned"
+        },
+        {
+          "expr": "rate(pg_stat_database_tup_fetched{datname!~\"template.*\"}[5m])",
+          "legendFormat": "{{datname}} fetched"
+        },
+        {
+          "expr": "rate(pg_stat_database_tup_inserted{datname!~\"template.*\"}[5m])",
+          "legendFormat": "{{datname}} inserted"
+        },
+        {
+          "expr": "rate(pg_stat_database_tup_updated{datname!~\"template.*\"}[5m])",
+          "legendFormat": "{{datname}} updated"
+        },
+        {
+          "expr": "rate(pg_stat_database_tup_deleted{datname!~\"template.*\"}[5m])",
+          "legendFormat": "{{datname}} deleted"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "Database Size",
+      "type": "graph",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 22 },
+      "targets": [
+        {
+          "expr": "pg_database_size_bytes{datname!~\"template.*\"} / 1024 / 1024",
+          "legendFormat": "{{datname}} (MiB)"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "MiB" } }
+    },
+    {
+      "id": 7,
+      "title": "Deadlocks",
+      "type": "graph",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 22 },
+      "targets": [
+        {
+          "expr": "rate(pg_stat_database_deadlocks{datname!~\"template.*\"}[5m])",
+          "legendFormat": "{{datname}}"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,37 @@
+<!-- test_google.html -->
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Google OAuth Test</title>
+</head>
+<body>
+    <h1>Google OAuth Test</h1>
+    <button onclick="login()">Login with Google</button>
+    <div id="result"></div>
+
+    <script>
+        const CLIENT_ID = '837704981081-hpdhhlkbu1vfi1avc83bhs4q7dsh78gp.apps.googleusercontent.com';
+        const REDIRECT_URI = 'http://localhost:5173/auth/callback';
+
+        function login() {
+            const state = Math.random().toString(36).substring(7);
+            sessionStorage.setItem('oauth_state', state);
+            
+            const params = new URLSearchParams({
+                client_id: CLIENT_ID,
+                response_type: 'code',
+                redirect_uri: REDIRECT_URI,
+                scope: 'openid profile email',
+                state: state,
+                access_type: 'offline',
+                prompt: 'consent select_account',
+            });
+            
+            const url = `https://accounts.google.com/o/oauth2/v2/auth?${params}`;
+            console.log('🔑 Redirect URI:', REDIRECT_URI);
+            console.log('🔗 Full URL:', url);
+            window.location.href = url;
+        }
+    </script>
+</body>c
+</html>

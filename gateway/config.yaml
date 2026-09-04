@@ -1,0 +1,19 @@
+apisix:
+  node_listen: 6080
+  enable_admin: true
+deployment:
+  role: traditional
+  role_traditional:
+    config_provider: etcd
+  admin:
+    admin_key_required: true
+    admin_key:
+      - name: admin
+        key: fa2f8f80a08b5ec0406c57b621b8336d
+        role: admin
+    allow_admin:
+      - 127.0.0.0/24
+      - 172.16.0.0/12
+  etcd:
+    host:
+      - "http://apisix-etcd:2379"
